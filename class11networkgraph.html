@@ -1,0 +1,187 @@
+```
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+.nodes circle {
+  fill: #ccc;
+  stroke: #000;
+}
+.links {
+  stroke: #999;
+  stroke-width: 1.5px;
+}
+text {
+  pointer-events: none;
+  text-anchor: middle;
+}
+</style>
+<svg width="960" height="600"></svg>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script>
+//This chart uses d3 4.0 for node charts
+var svg = d3.select("svg"),
+    width = +svg.attr("width"),
+    height = +svg.attr("height");
+
+//Simulation helps to assign x and y values automatically to put the dots on the map
+var simulation = d3.forceSimulation()
+    .force("charge", d3.forceManyBody().strength(-50))
+    .force("link", d3.forceLink().id(function(d) { return d.id; }))
+    .force("x", d3.forceX(width / 2))
+    .force("y", d3.forceY(height / 2));
+
+//color scales
+var color = d3.scaleOrdinal(d3.schemeCategory20c);
+
+//Add data here
+d3.tsv("barley.tsv", function(error, data) {
+  
+  console.log(data);
+
+//Create an empty object, which will be used to manipulate the data into pairs, so that you can easily access them
+var yieldLookup = {}
+
+  data.forEach(function(d) {
+    //Ensure that the data does not have any spaces in it
+    d.site = d.site.replace(" ","").replace(". ", "")
+    d.variety = d.variety.replace(" ","").replace(". ", "")
+    //Create data to go inside the empty yieldLookupObject. Title the category: Site-variety-year, dynamically
+    yieldLookup[d.site + '-' + d.variety + "-" + d.year] = +d.yield;
+  })
+
+  //Create new variables within the nested data. Use d3.set because it is like an ordinal scale
+  var sites = d3.set(data.map(function(d) { return d.site; })).values();
+  var siteVarieties = d3.set(data.map(function(d) { return d.site + '-' + d.variety; })).values();
+  var siteVarietiesYears = d3.set(data.map(function(d) { return d.site + '-' + d.variety + "-" + d.year; })).values();
+
+//Nodes are circles and links are the lines between circles
+//push adds things into the array
+  var nodes = [],
+      links = [];
+      //Automatically create nodes for each site
+      sites.forEach(function(site){
+        nodes.push({"id" : site, 
+                    "shortName": site,
+                    "radius": 10,
+                    "color": "#fff",
+                    "classValue": "site" })
+      })
+      //Create nodes for each siteVariety
+      //split takes site-variety and turns it into an array that reads [site, variety]. Then it grabs the value of variety, which is in place 1 of the array [0, 1]. Also connects colors, and classValue to these values (dynamic)
+      siteVarieties.forEach(function(siteVariety) {
+        nodes.push({"id" : siteVariety, 
+                    "shortName": siteVariety.split("-")[1],
+                    "radius": 10,
+                    "color" : color(siteVariety.split("-")[1]),
+                    "classValue": siteVariety.split("-")[1].replace(".","") });
+
+        //Create links that connect source: (values) to siteVariety (aka UF Manchuria)
+        links.push({
+          "source": siteVariety.split("-")[0],
+          "target": siteVariety
+        })
+      })
+      //Create nodes for each sitevarietyyears
+      siteVarietiesYears.forEach(function(svy) {
+        nodes.push({"id" : svy, 
+                    "shortName": svy.split("-")[2],
+                    "radius": Math.sqrt(yieldLookup[svy])/Math.PI*10,
+                    "color": color(svy.split("-")[1]),
+                    "classValue": svy.split("-")[1].replace(".","") });
+        links.push({
+          "source": svy.split("-")[0] + '-' + svy.split("-")[1],
+          "target": svy
+        })
+      })
+//graph is just the type of chart that uses nodes and links
+  var graph = {
+   "nodes": nodes,
+   "links": links 
+  }
+//Lets see what this code looks like...
+  console.log(sites);
+  console.log(siteVarieties);
+  console.log(siteVarietiesYears);
+  console.log(graph)
+
+//Where we have links, add lines
+  var link = svg.append("g")
+      .attr("class", "links")
+      .selectAll("line")
+      .data(graph.links)
+    .enter().append("line");
+//Where we have nodes, add circles
+  var node = svg.append("g")
+      .attr("class", "nodes")
+      .selectAll("circle")
+      .data(graph.nodes)
+    .enter().append("circle")
+      .attr("class", function(d) { return d.classValue; })
+      .attr("r", function(d) { return d.radius; })
+      .style("fill", function(d) { return d.color; })
+      //create the effect that allows you to drag the circles
+      .call(d3.drag()
+    .on("start", dragstarted)
+    .on("drag", dragged)
+    .on("end", dragended))
+
+      //This creates the hover function. Assigns a class, and then styles the circls based on the class
+    .on("mouseenter", function(d) {
+      var lookupClass = d.classValue;
+      d3.selectAll("circle").style("fill-opacity", .1)
+      d3.selectAll("." + lookupClass).style("fill-opacity", 1)
+    })
+    .on("mouseleave", function(d) {
+      var lookupClass = d.classValue;
+      d3.selectAll("circle").style("fill-opacity", 1)
+    })
+
+   //Adds text to each node 
+  var text = svg.append("g")
+      .attr("class", "text")
+      .selectAll("text")
+      .data(graph.nodes)
+    .enter().append("text")
+      .text(function(d, i) { return d.shortName; })
+
+  //Calls the function to map all of the nodes/links. .on tick means "on page load"
+  simulation
+      .nodes(graph.nodes)
+      .on("tick", ticked);
+  simulation.force("link")
+      .links(graph.links);
+
+console.log(graph.links);
+
+//This looks up the x and y values that are generated from the simulations
+function ticked() {
+    link
+        .attr("x1", function(d) { return d.source.x; })
+        .attr("y1", function(d) { return d.source.y; })
+        .attr("x2", function(d) { return d.target.x; })
+        .attr("y2", function(d) { return d.target.y; });
+    node
+        .attr("cx", function(d) { return d.x; })
+        .attr("cy", function(d) { return d.y; });
+    text
+        .attr("x", function(d) { return d.x; })
+        .attr("y", function(d) { return d.y; });
+  }
+}); 
+
+//This makes the drag work
+function dragstarted(d) {
+  if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+  d.fx = d.x;
+  d.fy = d.y;
+}
+function dragged(d) {
+  d.fx = d3.event.x;
+  d.fy = d3.event.y;
+}
+function dragended(d) {
+  if (!d3.event.active) simulation.alphaTarget(0);
+  d.fx = null;
+  d.fy = null;
+}
+</script>
