@@ -7,10 +7,15 @@
 	<script src="https://d3js.org/d3.v4.min.js"></script>	
 </head>
 <body>
-<svg width="960" height="600"></svg>
 
 <script>
 
+var width = 900
+var height = 720
+
+var svg = d3.select('body').append('svg')
+	.attr('width', width)
+	.attr('height', height)
 
 var simulation = d3.forceSimulation()
 	.force("charge", d3.forceManyBody().strength(-80))
@@ -23,8 +28,24 @@ var color = d3.scaleOrdinal(d3.schemeCategory20c);
 
 
 d3.csv('TaxiData.csv', function(e, taxiData){
-	console.log(taxiData)
 
+	taxiData.forEach(function(d){
+		d.passenger_count = +d.passenger_count
+	})
+
+	var frame = taxiData.map(function(d){
+		return {'pickup_borough': d.pickup_borough, 'dropoff_borough': d.dropoff_borough, 'passenger_count': d.passenger_count}
+	})
+
+	var nodes = frame;
+	var links = [];
+
+	frame.forEach(function(d){
+		links.push({'source': d.pickup_borough, 'target': d.dropoff_borough})
+	})
+
+	var graph = {'nodes':nodes, 'links':links}
+	console.log(graph)
 
 }) // END TAXIDATA FUNC
 
